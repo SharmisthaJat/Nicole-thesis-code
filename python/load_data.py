@@ -48,12 +48,21 @@ WORD_PER_SEN = {'krns2':
                          {'firstNoun': ['man', 'girl', 'woman', 'boy'],
                           'verb': ['kicked', 'helped', 'approached', 'punched'],
                           'secondNoun': ['man.', 'girl.', 'woman.', 'boy.']}}}
-
+'''
+In Nicole's experiments she is using some context before and after the word, therefore there is -0.5 in tmin and 4 in tmax
+I should be using tmin = 0 and tmax = 0.4
 TIME_LIMITS = {'active': {'firstNoun': {'tmin': -0.5, 'tmax': 4.5},
                           'verb': {'tmin': -0.5, 'tmax': 4},
                           'secondNoun': {'tmin': -0.5, 'tmax': 3}},
                'passive': {'firstNoun': {'tmin': -0.5, 'tmax': 5.5},
                            'verb': {'tmin': -0.5, 'tmax': 4.5},
+                           'secondNoun': {'tmin': -0.5, 'tmax': 4}}}
+'''
+TIME_LIMITS = {'active': {'firstNoun': {'tmin': -0.5, 'tmax': 4.5},
+                          'verb': {'tmin': 0.0, 'tmax': 0.4},
+                          'secondNoun': {'tmin': -0.5, 'tmax': 3}},
+               'passive': {'firstNoun': {'tmin': -0.5, 'tmax': 5.5},
+                           'verb': {'tmin': 0.0, 'tmax': 0.4},
                            'secondNoun': {'tmin': -0.5, 'tmax': 4}}}
 
 # Old slugs:
@@ -100,15 +109,60 @@ def load_raw(subject, word, sen_type, experiment='krns2', proc=DEFAULT_PROC):
     evokeds = np.array([hippo.io.load_mne_epochs(us, preprocessing=proc, baseline=None,
                                         tmin=tmin, tmax=tmax) for us in uels])
 
-    # Downsample
-    evokeds = evokeds[:, :, :, ::2]
-    time = np.arange(tmin, tmax+2e-3, 2e-3)
+    # Downsample, check if this is necessary, nichole's experiment showed that not all points are necessary, but I could keep them and check
+    # evokeds = evokeds[:, :, :, ::2]
+    # time = np.arange(tmin, tmax+2e-3, 2e-3)
+    time = np.arange(tmin, tmax+1e-3, 1e-3)
     print(evokeds.shape[3])
     print(time.size)
     assert evokeds.shape[3] == time.size
 
     return evokeds, labels, time
 
+def load_raw_all_verbs(proc=DEFAULT_PROC):
+    usis = hippo.query.query_usis([('stanford_2017_06_09_pos',lambda s : s.startswith('VB')),('sentence_id', lambda sid : sid != None)], include_annotations=['stimulus', 'sentence_id'])
+    uels = hippo.query.get_uels_from_usis(usis.keys())
+    uels = {k: v for (k, v) in uels.iteritems() if len(v) > 0}  # checking for empties
+    id_uels = [(k, uels[k]) for k in uels.keys()]  # putting uels in a list instead of a map (explicit ordering)
+    labels = [usis[k]['stimulus'] for k, _ in id_uels]
+
+    _, uels = zip(*id_uels)
+
+    tmin = 0.0#TIME_LIMITS[sen_type][word]['tmin']
+    tmax = 0.4#TIME_LIMITS[sen_type][word]['tmax']
+    evokeds = np.array([hippo.io.load_mne_epochs(us, preprocessing=proc, baseline=None,
+                                        tmin=tmin, tmax=tmax) for us in uels])
+
+    # Downsample, check if this is necessary, nichole's experiment showed that not all points are necessary, but I could keep them and check
+    # evokeds = evokeds[:, :, :, ::2]
+    # time = np.arange(tmin, tmax+2e-3, 2e-3)
+    time = np.arange(tmin, tmax+1e-3, 1e-3)
+    print(evokeds.shape[3])
+    print(time.size)
+    assert evokeds.shape[3] == time.size
+
+    return evokeds, labels, time
+
+def avg_data_all(data_raw, labels_raw,num_instances=1, reps_to_use=-1):
+    
+    if len(data_raw.shape) > 3:
+        data_list = []
+        for i in range(num_instances):
+            data_list.append(np.mean(data_raw[:, range(i, reps_to_use, num_instances), :, :], axis=1))
+        data = np.concatenate(data_list, axis=0)
+    else:
+        data = np.empty((NUM_SENTENCES * num_instances, data_raw.shape[1], data_raw.shape[2]))
+        for s in range(NUM_SENTENCES):
+            startInd = num_reps * s
+            endInd = startInd + reps_to_use - 1
+            for i in range(num_instances):
+                data[s + (NUM_SENTENCES*i), :, :] = np.mean(data_raw[(startInd + i):endInd:num_instances, :, :], axis=0)
+
+    labels = []
+    for i in range(num_instances):
+        labels.extend(labels_raw)
+
+    return data, labels
 
 def avg_data(data_raw, labels_raw, experiment='krns2', num_instances=2, reps_to_use=-1):
     num_reps = NUM_REPS[experiment]
