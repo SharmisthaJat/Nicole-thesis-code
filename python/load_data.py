@@ -119,6 +119,35 @@ def load_raw(subject, word, sen_type, experiment='krns2', proc=DEFAULT_PROC):
 
     return evokeds, labels, time
 
+def load_full_experiment(subject, word, sen_type, experiment='krns2', proc=DEFAULT_PROC):
+    usis = hippo.query.query_usis([('stimuli_set', experiment),
+                                   ('stimulus', lambda s: s in WORD_PER_SEN[experiment][sen_type][word]),
+                                   # without periods, gets the first noun
+                                   ('sentence_id', lambda sid: sid != None),
+                                   ('word_index_in_sentence', lambda wis: wis == WORD_POS[sen_type][word])],
+                                  include_annotations=['stimulus', 'sentence_id'])  # excludes questions
+    exp_sub = [(experiment, subject)]
+    uels = hippo.query.get_uels_from_usis(usis.keys(), experiment_subjects=exp_sub)
+    uels = {k: v for (k, v) in uels.iteritems() if len(v) > 0}  # checking for empties
+    id_uels = [(k, uels[k]) for k in uels.keys()]  # putting uels in a list instead of a map (explicit ordering)
+    labels = [usis[k]['stimulus'] for k, _ in id_uels]
+    sentence_id = [usis[k]['sentence_id'] for k, _ in id_uels]
+    _, uels = zip(*id_uels)
+
+    tmin= -0.5;tmax=4.0
+    evokeds = np.array([hippo.io.load_mne_epochs(us, preprocessing=proc, baseline=None,
+                                        tmin=tmin, tmax=tmax) for us in uels])
+
+    # Downsample, check if this is necessary, nichole's experiment showed that not all points are necessary, but I could keep them and check
+    # evokeds = evokeds[:, :, :, ::2]
+    # time = np.arange(tmin, tmax+2e-3, 2e-3)
+    time = np.arange(tmin, tmax+1e-3, 1e-3)
+    print(evokeds.shape[3])
+    print(time.size)
+    assert evokeds.shape[3] == time.size
+
+    return evokeds, labels, sentence_id, time
+
 def load_raw_all_verbs(proc=DEFAULT_PROC):
     usis = hippo.query.query_usis([('stanford_2017_06_09_pos',lambda s : s.startswith('VB')),('sentence_id', lambda sid : sid != None)], include_annotations=['stimulus', 'sentence_id'])
     uels = hippo.query.get_uels_from_usis(usis.keys())

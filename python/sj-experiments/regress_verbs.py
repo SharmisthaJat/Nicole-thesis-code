@@ -8,12 +8,13 @@ sys.path.append("../")
 import load_data 
 from sklearn.linear_model import LinearRegression
 from sklearn import linear_model
-DEFAULT_PROC = 'trans-D_nsb-5_cb-0_empty-4-10-2-2_band-1-150_notch-60-120_beats-head-meas_blinks-head-meas'
+#DEFAULT_PROC = 'trans-D_nsb-5_cb-0_empty-4-10-2-2_band-1-150_notch-60-120_beats-head-meas_blinks-head-meas'
+DEFAULT_PROC = 'trans-D_nsb-5_cb-0_emptyroom-4-10-2-2_band-1-150_notch-60-120_beatremoval-first_blinkremoval-first'
 import gensim
 from sklearn.metrics.pairwise import cosine_similarity
 from operator import itemgetter
 import numpy as np
-
+from sklearn.model_selection import cross_val_predict
 
 def mean_reciprocal_rank(rs):
     """Score is reciprocal of the rank of the first relevant item
@@ -67,18 +68,18 @@ def load_dataset():
 	subject = 'B'
 	sen_type = 'active'
 	experiment = 'krns2'
-	DEFAULT_PROC = 'trans-D_nsb-5_cb-0_empty-4-10-2-2_band-1-150_notch-60-120_beats-head-meas_blinks-head-meas'
+	#DEFAULT_PROC = 'trans-D_nsb-5_cb-0_empty-4-10-2-2_band-1-150_notch-60-120_beats-head-meas_blinks-head-meas'
 	reps_to_use = 15  # default one to replicate Nicole's experiments
 	num_instances = 1 # default one to replicate Nicole's experiments
 	word='verb'
-	'''
+	
 	data_raw, labels, time = load_data.load_raw(subject=subject,
                                                     word=word,
                                                     sen_type=sen_type,
                                                     experiment=experiment,
                                                     proc=DEFAULT_PROC)
-                                                    '''
-	data_raw, labels, time = load_data.load_raw_all_verbs()
+                                                  
+	#data_raw, labels, time = load_data.load_raw_all_verbs()
 	# averaging data 
 	data, labels = load_data.avg_data_all(data_raw=data_raw,
                                       labels_raw=labels,
@@ -90,15 +91,18 @@ def cal_cosine_similarity(a,b):
     return cosine_similarity(np.array(a).reshape(1, -1),np.array(b).reshape(1, -1))[0][0]
 
 def make_rs_matrix(predicted_vec, candidate_label_vec,true_labels):
-	rs = [[0 for i in range(predicted_vec.shape[0])] for j in range(len(candidate_label_vec))] 
+	print true_labels, 
+	rs = [[0 for i in range(len(candidate_label_vec))] for j in range(predicted_vec.shape[0])] 
 	for item_num,prediction in enumerate(predicted_vec):
 		simi = [(candidate[0],cal_cosine_similarity(prediction,candidate[1]))for candidate in candidate_label_vec]
 		# sort similarity in descending order
-		simi_sorted = sorted(simi, key=itemgetter(1),reverse=True)\
+		simi_sorted = sorted(simi, key=itemgetter(1),reverse=True)
 		# mark the rank of true item
 		label_ranks = [a[0] for a in simi_sorted]
+		print label_ranks, simi_sorted
+		print len(rs),":",len(rs[0]),":",label_ranks.index(true_labels[item_num]),true_labels[item_num], item_num
 		rs[item_num][label_ranks.index(true_labels[item_num])] = 1
-
+	print rs
 	return rs
 
 if __name__=='__main__':
@@ -107,12 +111,13 @@ if __name__=='__main__':
 	print data.shape
 	print labels
 
-	data_flattened=data.reshape(data.shape[0],(data.shape[1]*data.shape[2]))\
+	data_flattened=data.reshape(data.shape[0],(data.shape[1]*data.shape[2]))
 
-	xtrain, xtest, xdev = partition_data(data_flattened)\
-
+	xtrain, xtest, xdev = partition_data(data_flattened)
+	#print 'loading w2v..'
 	#emb = load_vectors_bin('/home/sjat/repositories/Nicole-thesis-code/python/sj-experiments/embeddings_files/GoogleNews-vectors-negative300.bin')
-	emb = load_vectors_text('/home/sjat/repositories/Nicole-thesis-code/python/sj-experiments/embeddings_files/glove.840B.300d.txt')
+
+	emb = load_vectors_text('embeddings_files/glove.840B.300d.txt')
 	label_emb = np.array([emb[l] for l in labels])
 	possible_emb = [(l,emb[l]) for l in list(set(labels))]
 
@@ -121,14 +126,17 @@ if __name__=='__main__':
 	ytrain_label, ytest_label,ydev_label = partition_data(labels)
 
 	# learn linear regressor for hopefully maximing the MRR for embedding of the target word 
-	lregressor = LinearRegression()  # 0.58 (w2v), 0.875 (glove)
-	lregressor = linear_model.Ridge (alpha = 2)  # 0.33 (w2v), 0.33(glove)
-	#lregressor = linear_model.Lasso(alpha = 0.1)  #  0.33 (w2v)
-	# lregressor = linear_model.BayesianRidge() # (w2v), (glove), error
-	lregressor.fit(xtrain,ytrain_emb)
-	ypredicted_emb = lregressor.predict(xtest)
 
-	rs_matrix = make_rs_matrix(ypredicted_emb,possible_emb,ytest_label)
+	lregressor = LinearRegression()  # MRR:  0.703125 (w2v),  MRR:  0.791666666667(glove) // cv=8
+	#lregressor = linear_model.Ridge (alpha = 2)  # 0.33 (w2v), 0.33(glove)
+	lregressor = linear_model.Lasso(alpha = 0.1)  #  0.33 (w2v)
+	# lregressor = linear_model.BayesianRidge() # (w2v), (glove), error
+	#lregressor.fit(xtrain,ytrain_emb)
+	predicted = cross_val_predict(lregressor, data_flattened, label_emb, cv=8)
+	
+	#ypredicted_emb = lregressor.predict(xtest)
+
+	rs_matrix = make_rs_matrix(predicted,possible_emb,labels)
 	#print 'rs_matrix', rs_matrix
 	print 'MRR: ',mean_reciprocal_rank(rs_matrix)
 
