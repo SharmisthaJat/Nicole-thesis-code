@@ -383,6 +383,8 @@ def calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm):
     print ('{:.3f}({:0.1e}) & {:.3f}({:0.1e}) & {:.3f}({:0.1e}) & {:.3f}({:0.1e})'.format(r1,p1,r2,p2,r3,p3,r4,p4))
 
     print ('-------------------------------------------------')
+    print ('-------------------------------------------------')
+    print ('-------------------------------------------------')
 
     # r, p, z = Mantel.test(rnng_rdm, ap_rdm)
 
@@ -401,6 +403,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset",help="data for RDM",choices=["krns2","PassAct2"])
     parser.add_argument("embedding_type",help="data for RDM",choices=["w2v","glove",'None'])
+    parser.add_argument("remove_unk",help="yes/no choice for remove unk",choices=["with_unk","no_unk"])
     args = parser.parse_args()
     # load embeddings
     if args.embedding_type == 'w2v':
@@ -410,6 +413,24 @@ if __name__ == '__main__':
     elif args.embedding_type == 'None':
         emb_name='lstm';
         pass
+
+    if args.remove_unk == 'no_unk':
+        UNK_INDS = {'krns2':[0, 2, 5, 7, 9, 11, 12, 13, 14, 15, 16, 18, 21, 23, 25, 27, 28, 29, 30, 31],
+            'PassAct2': [2, 5, 8, 15, 18, 21, 24, 31]
+            }
+        NON_UNK_INDS = {'krns2':[1, 3, 4, 6, 8, 10, 17, 19, 20, 22, 24, 26],
+                    'PassAct2':[0, 1, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 23, 25, 26, 27, 28, 29, 30]}
+        if args.dataset == 'krns2':
+            NUMAP = 12
+        else:
+            NUMAP = 24
+    else:
+        UNK_INDS = {'krns2':[],
+            'PassAct2': []
+            }
+        NON_UNK_INDS = {'krns2':[],
+            'PassAct2': []
+            }
 
     # if args.dataset == 'word':
     #     # get words from the brain-data-corpus
@@ -425,7 +446,7 @@ if __name__ == '__main__':
     #         for j,w2 in enumerate(words):
     #             non_smilarity_matrix[i][j] =  1-cal_cosine_similarity(emb[w1],emb[w2])
 
-    #     file_name = './output'+args.dataset+'--verb-disimilarity-'+emb_name
+    #     file_name = './output/'+args.dataset+'-'+args.remove_unk+'--verb-disimilarity-'+emb_name
     #     plot_inch_sz = (5,5)
     #     plot_mat(non_smilarity_matrix,words,file_name,plot_inch_sz)
     #     cPickle.dump([words,[emb[w] for w in words],non_smilarity_matrix],open(file_name+".pkl",'w'))
@@ -433,53 +454,69 @@ if __name__ == '__main__':
     # for removing anything with UNK, remove items from EXP_INDS[args.dataset]
 
 
-    VECTORS = './data/sentence_stimuli_tokenized_tagged_pred_trees_no_preterms_vectors.txt'
-    vectors = np.loadtxt(VECTORS)
-    vectors = vectors[EXP_INDS[args.dataset], :]
-    rnng_rdm = squareform(pdist(vectors))
-
+    
     # read csv and calculate sentence similarity with w2v averaging to get sentence context
     #sent_list = get_corpus_sents('./data/active-passive-sents.tsv')
     
     ap_list, sen_list = get_sen_lists('./data/sentence_stimuli_tokenized_tagged_with_unk_final.txt')
-    ap_list = ap_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']]
-    sen_list = sen_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']]
+
+    # unk_list=[]
+    # for i,item in enumerate(sen_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']]):
+    #     for itm in item:
+    #         if 'UNK-LC' in itm:
+    #             unk_list.append(i)
+    #             break
+    # unk_list = list(set(range(32))-set(unk_list))
+    # print unk_list, 'non-unklist'
+    # sys.exit(0)
+
+    ap_list = [ap_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']][i] for i in NON_UNK_INDS[args.dataset]]
+    sen_list = [sen_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']][i] for i in NON_UNK_INDS[args.dataset]]
+
+    VECTORS = './data/sentence_stimuli_tokenized_tagged_pred_trees_no_preterms_vectors.txt'
+    vectors = np.loadtxt(VECTORS)
+    vectors = vectors[EXP_INDS[args.dataset], :][NON_UNK_INDS[args.dataset],:]
+    rnng_rdm = squareform(pdist(vectors))
+
     print len(ap_list),len(sen_list), 'ap and sen list length'
     ap_rdm = syn_rdm(ap_list)
     semantic_rdm = sem_rdm(sen_list, ap_list)        
     sent_list = [" ".join(a) for a in sen_list]
     #-------------------------
     # plot rnng rdm
-    file_name = './output'+args.dataset+'--rnng-disimilarity-'
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--rnng-disimilarity-'
     plot_inch_sz=(26, 26)
     plot_mat(rnng_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,rnng_rdm],open(file_name+".pkl",'w'))
-    file_name = './output'+args.dataset+'--semantic-disimilarity-'
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--semantic-disimilarity-'
     plot_inch_sz=(26, 26)
     plot_mat(semantic_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,semantic_rdm],open(file_name+".pkl",'w'))
-    file_name = './output'+args.dataset+'--syntatic-disimilarity-'
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--syntatic-disimilarity-'
     plot_inch_sz=(26, 26)
     plot_mat(ap_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,ap_rdm],open(file_name+".pkl",'w'))
     #-----------------------------------------------------------
     print('with LSTM emb ------ --- --- ')
-    sen_emb = np.loadtxt('./data/lstm_lm/test_sents_vectors.txt')[EXP_INDS[args.dataset], :]
+    sen_emb = np.loadtxt('./data/lstm_lm/test_sents_vectors.txt')[EXP_INDS[args.dataset], :][NON_UNK_INDS[args.dataset],:]
     lstm_rdm = create_lstm_semantic_rdm(sen_emb)
     vec_rdm = lstm_rdm
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output'+args.dataset+'--lstm-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--lstm-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,vec_rdm],open(file_name+".pkl",'w'))
+    #-----------------------------------------------------------
+    print('with RNNG emb ------ --- --- ')
+    calculate_correlation(rnng_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
     #-----------------------------------------------------------
     print('with full sentence average emb ------ --- --- ')
     non_smilarity_matrix = create_semantic_rdm(sen_list,emb)        
     vec_rdm = non_smilarity_matrix
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output'+args.dataset+'--sent-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--sent-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,non_smilarity_matrix],open(file_name+".pkl",'w'))
@@ -489,7 +526,7 @@ if __name__ == '__main__':
     vec_rdm = noun_disimilarity_matrix
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output'+args.dataset+'--noun-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--noun-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,vec_rdm],open(file_name+".pkl",'w'))
@@ -499,7 +536,7 @@ if __name__ == '__main__':
     vec_rdm = verb_disimilarity_matrix
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output'+args.dataset+'--verb-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--verb-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,vec_rdm],open(file_name+".pkl",'w'))
@@ -509,22 +546,22 @@ if __name__ == '__main__':
     vec_rdm = first_noun_vec_disimilarity_matrix
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output'+args.dataset+'--first-noun-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--first-noun-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,vec_rdm],open(file_name+".pkl",'w'))
     
      #-----------------------------------------------------------
     ap_list, sen_list = get_sen_lists('./data/sentence_agent.txt')
+    ap_list = [ap_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']][i] for i in NON_UNK_INDS[args.dataset]]
+    sen_list = [sen_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']][i] for i in NON_UNK_INDS[args.dataset]]
     sent_list = [" ".join(a) for a in sen_list]
-    ap_list = ap_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']]
-    sen_list = sen_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']]
     print('with agent emb ------ --- --- ')
     non_smilarity_matrix = create_semantic_rdm(sen_list,emb)        
     vec_rdm = non_smilarity_matrix
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output'+args.dataset+'--agent-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--agent-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,non_smilarity_matrix],open(file_name+".pkl",'w'))
