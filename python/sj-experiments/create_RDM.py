@@ -30,19 +30,21 @@ LST_INDS = {'krns2-s': 64,'krns2-e': 96,
 
 NUMAP = 32
 DEFAULT_PROC = 'trans-D_nsb-5_cb-0_empty-4-10-2-2_band-1-150_notch-60-120_beats-head-meas_blinks-head-meas'
+stop_words = ['was', 'by', 'the', 'to', 'in', 'a', 'from', 'at', '.']
 
 def plot_mat(mat,labels,plot_name,plot_inch_sz):
     fig,ax = plt.subplots()
     fig.set_size_inches(plot_inch_sz[0],plot_inch_sz[1])
-    cax = ax.imshow(mat,cmap='hot')#,aspect = 0.7)
+    cax = ax.imshow(mat,cmap='hot',vmin=0, vmax=1)#,aspect = 0.7)
     
     cbar = fig.colorbar(cax, orientation='horizontal')
+    cbar.ax.tick_params(labelsize=24)
     #cbar.ax.set_xticklabels(['Low', 'Medium', 'High'])  # horizontal colorbar
     ax.set_xticks(np.arange(len(labels)))
     ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels,ha='right',rotation=45)
-    ax.set_yticklabels(labels,rotation=45)
-    fig.savefig(plot_name+".pdf", dpi=100)
+    ax.set_xticklabels(labels,ha='right',rotation=45,fontsize=19)
+    ax.set_yticklabels(labels,rotation=45,fontsize=19)
+    fig.savefig(plot_name+".png", dpi=100)
 
 def cal_cosine_similarity(a,b):
     return cosine_similarity(np.array(a).reshape(1, -1),np.array(b).reshape(1, -1))[0][0]
@@ -86,7 +88,8 @@ def sentence_average_emb(sentence,emb):
             try:
                 word = w.replace(".","")
                 word = word.replace(",","")
-                sent_emb.append(emb[word])
+                if word.lower() not in stop_words:
+                    sent_emb.append(emb[word])
             except:
                 continue
         if len(sent_emb)<1:
@@ -103,7 +106,8 @@ def sentence_average_emb_split(sentence,emb):
             try:
                 word = w.replace(".","")
                 word = word.replace(",","")
-                sent_emb.append(emb[word])
+                if word.lower() not in stop_words:
+                    sent_emb.append(emb[word])
             except:
                 continue
         if len(sent_emb)>0:
@@ -196,7 +200,8 @@ def create_noun_semantic_rdm(sen_list,emb):
         tags = st.tag(sent)
         words=[]
         for wordtag in tags:
-            if wordtag[1].startswith('N'):
+            if (wordtag[1].startswith('NN') or wordtag[1].startswith('VB')) and wordtag[0].lower() not in stop_words:
+                print wordtag
                 words.append(wordtag[0])        
         sent_list_emb.append(sentence_average_emb_split(words,emb))
             
@@ -219,7 +224,7 @@ def create_firstnoun_semantic_rdm(sen_list,emb):
         tags = st.tag(sent)
         words=[]
         for wordtag in tags:
-            if wordtag[1].startswith('NN'):
+            if wordtag[1].startswith('NN') and wordtag[0].lower() not in stop_words:
                 words.append(wordtag[0])
                 break        
         sent_list_emb.append(sentence_average_emb_split(words,emb))
@@ -243,7 +248,7 @@ def create_noun_agent_semantic_rdm(sen_list,emb):
         tags = st.tag(sent)
         words=[]
         for wordtag in tags:
-            if wordtag[1].startswith('NN'):
+            if wordtag[1].startswith('NN') and wordtag[0].lower() not in stop_words:
                 words.append(wordtag[0])
                 if len(words)>1:
                     break
@@ -264,12 +269,17 @@ def create_noun_agent_semantic_rdm(sen_list,emb):
 def create_verb_semantic_rdm(sen_list,emb):
     st = StanfordPOSTagger('english-bidirectional-distsim.tagger')
     sent_list_emb = []
-    for sent in sen_list:
+    for i,sent in enumerate(sen_list):
         tags = st.tag(sent)
         words=[]
+        print i,sent,"--", tags
         for wordtag in tags:
-            if wordtag[1].startswith('VB'):
+            if wordtag[1].startswith('VB') and wordtag[0].lower() not in stop_words:
+                print wordtag
                 words.append(wordtag[0])        
+        if len(words)<1:
+            print 'No VERBS'
+
         sent_list_emb.append(sentence_average_emb_split(words,emb))
             
     non_smilarity_matrix = np.zeros((len(sen_list),len(sen_list)))
@@ -419,10 +429,13 @@ if __name__ == '__main__':
             'PassAct2': [2, 5, 8, 15, 18, 21, 24, 31]
             }
         NON_UNK_INDS = {'krns2':[1, 3, 4, 6, 8, 10, 17, 19, 20, 22, 24, 26],
-                    'PassAct2':[0, 1, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 23, 25, 26, 27, 28, 29, 30]}
+                        #'PassAct2':[1, 3, 4, 6, 9, 11, 12, 14, 17, 19, 20, 22, 25, 27, 28, 30]
+                        'PassAct2':[0, 1, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 23, 25, 26, 27, 28, 29, 30]
+                    }
         if args.dataset == 'krns2':
             NUMAP = 12
         else:
+            #NUMAP = 16
             NUMAP = 24
     else:
         UNK_INDS = {'krns2':[],
@@ -463,7 +476,7 @@ if __name__ == '__main__':
     # unk_list=[]
     # for i,item in enumerate(sen_list[LST_INDS[args.dataset+'-s']:LST_INDS[args.dataset+'-e']]):
     #     for itm in item:
-    #         if 'UNK-LC' in itm:
+    #         if 'UNK-LC' in itm or 'watched' in itm:
     #             unk_list.append(i)
     #             break
     # unk_list = list(set(range(32))-set(unk_list))
@@ -521,12 +534,12 @@ if __name__ == '__main__':
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,non_smilarity_matrix],open(file_name+".pkl",'w'))
     #-----------------------------------------------------------
-    print('with noun ------ --- --- ')
+    print('with noun +verb------ --- --- ')
     noun_disimilarity_matrix = create_noun_semantic_rdm(sen_list,emb)
     vec_rdm = noun_disimilarity_matrix
     calculate_correlation(vec_rdm,semantic_rdm,ap_rdm,rnng_rdm,lstm_rdm)
 
-    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--noun-disimilarity-'+emb_name
+    file_name = './output/'+args.dataset+'-'+args.remove_unk+'--verb+noun-disimilarity-'+emb_name
     plot_inch_sz=(26, 26)
     plot_mat(vec_rdm,sent_list,file_name,plot_inch_sz)
     cPickle.dump([sent_list,vec_rdm],open(file_name+".pkl",'w'))
