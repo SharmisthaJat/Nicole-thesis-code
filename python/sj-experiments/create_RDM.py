@@ -1,5 +1,22 @@
 # create a dis-similarity matrix in the RDM format
 # Author: Sharmistha
+# instructions to run:
+'''
+Run following command for the script to be able to run stanford parser
+export STANFORD_MODELS=data/stanford-postagger-2017-06-09/models/english-bidirectional-distsim.tagger
+
+export CLASSPATH=data/stanford-postagger-2017-06-09/stanford-postagger.jar
+
+Script can be run using command
+
+python create_RDM.py krns2 glove no_unk
+
+Argument choices: 
+parser.add_argument("dataset",help="data for RDM",choices=["krns2","PassAct2"])
+parser.add_argument("embedding_type",help="data for RDM",choices=["w2v","glove",'None'])
+parser.add_argument("remove_unk",help="yes/no choice for remove unk",choices=["with_unk","no_unk"])
+
+'''
 import gensim
 import sys
 import numpy as np
