@@ -134,7 +134,7 @@ def load_full_experiment(subject, word, sen_type, experiment='krns2', proc=DEFAU
     sentence_id = [usis[k]['sentence_id'] for k, _ in id_uels]
     _, uels = zip(*id_uels)
 
-    tmin= -0.5;tmax=4.0
+    tmin= 0.0;tmax=3.9
     evokeds = np.array([hippo.io.load_mne_epochs(us, preprocessing=proc, baseline=None,
                                         tmin=tmin, tmax=tmax) for us in uels])
 
